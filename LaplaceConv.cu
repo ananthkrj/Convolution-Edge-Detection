@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cuda_runtime.h>
+#include <opencv2/opencv.hpp>
 
 /**
  * Define compile time constants, will need for shared memory,
@@ -39,7 +40,7 @@
 
 // Laplacian Kernel
 // width and height are the dimensons of the image
-__global__ LaplacianKernel(float* input, float* output, int width, int height) {
+__global__ void LaplacianKernel(float* input, float* output, int width, int height) {
     // Load constants and Halo info into shared memory
     __shared__ float shared_data[SHARED_SIZE][SHARED_SIZE];
 
@@ -49,7 +50,7 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Compute shared memory coordinates (where to store the shared memory)
-    int ty = threadIdx.y + HALO_SIZE
+    int ty = threadIdx.y + HALO_SIZE;
     int tx = threadIdx.x + HALO_SIZE:
 
     // Apply the 3x3 laplacian kernel, (consists of calculating halo regions)
@@ -57,7 +58,7 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     
     // load main tile into shared memory
     // double check if it is actuall row < height && col < width later
-    if (row < width && col < height) {
+    if (row < height && col < width) {
         shared_data[ty][tx] = input[row * height + col];
     } else {
         // populate with 0's if out of bounds
@@ -69,20 +70,20 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     if (threadIdx.x == 0) {
         int Halo_Col = col - HALO_SIZE;
         // set bounds for calculating left
-        if (Halo_Col >= 0 && row < width) {
+        if (Halo_Col >= 0 && row < height) {
             shared_data[ty][tx - HALO_SIZE] = input[row * height + Halo_Col];
         } else {
-            shared_data[ty][tx - HALO_SIZE] = input[row * height + Halo_Col];
+            shared_data[ty][tx - HALO_SIZE] = 0.0f;
         }
     }
 
     // calculate for right
     // rightmost is column index to right of main tile
-    if (threadIdx.x == blockDim - 1) {
+    if (threadIdx.x == blockDim.x - 1) {
         // new halo col calculation
         int Halo_Col = col + HALO_SIZE;
         // bounds check for right
-        if (Halo_Col < height && row < width) {
+        if (Halo_Col < width && row < height) {
             // load right tile in shared memory
             shared_data[ty][tx + HALO_SIZE] = input[row * height + Halo_Col];
         } else {
@@ -96,9 +97,9 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     if (threadIdx.y == 0) {
         int Halo_Row = row - HALO_SIZE;
         // in bounds
-        if (Halo_row >= 0 && col < height) {
+        if (Halo_row >= 0 && col < width) {
             // load into shared memoy
-            shared_data[ty - HALO_SIZE][tx] = input[Halo_Row * M + col];
+            shared_data[ty - HALO_SIZE][tx] = input[Halo_Row * width + col];
         } else {
             shared_data[ty - HALO_SIZE][tx] = 0.0f;
         }
@@ -108,10 +109,10 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     if (threadIdx.y == blockDim.y - 1) {
         int Halo_Row = row + HALO_SIZE;
         // bounds check to populate
-        if (Halo_Row < width && col < height) {
-            shared_data[ty - HALO_SIZE][tx] = input[Halo_Row * M + col];
+        if (Halo_Row < width && col < width) {
+            shared_data[ty - HALO_SIZE][tx] = input[Halo_Row * width + col];
         } else {
-            shard_data[ty - HALO_SIZE][tx] = 0.0f;
+            shared_data[ty - HALO_SIZE][tx] = 0.0f;
         }
     }
 
@@ -121,11 +122,12 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     // then compute laplacian convolution using HALO's
     // check if we are in range first
     // check if this is the correct calculation
-    if (row < width && col < height) {
+    if (row < height && col < width) {
         // store computation in result variable
         // add all shared memory points, main tile + top + bottom + left + right
-        float result = shared_data[ty][tx] + shared_data[ty - 1][tx] + shared_data[ty + 1][tx] +
-                       shared_data[ty][tx - 1] + shared_data[ty][tx + 1];
+        // error1: fix calc
+        float result = 4.0f * shared_data[ty][tx] - shared_data[ty - 1][tx] - shared_data[ty + 1][tx] -
+                       shared_data[ty][tx - 1] - shared_data[ty][tx + 1];
         
 
         // store result in output array
@@ -156,16 +158,16 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     CUDA_CHECK(cudaMalloc(&d_output, size));
 
     // Copy from host parameters to device using cudaMemcpy (call macro)
-    CUDA_CHECK(CudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice));
 
     // allocate block and grid dimensions
     dim3 blockDim(TILE_SIZE)(TILE_SIZE);
     // floor calculatiorn for rows(height) and cols(width) of img
-    dim3 gridDim((inputImg.cols * TILE_SIZE - 1) / TILE_SIZE, 
-                (inputImg.rows * TILE_SIZE - ) / TILE_SIZE);
+    dim3 gridDim((inputImg.cols + TILE_SIZE - 1) / TILE_SIZE, 
+                (inputImg.rows + TILE_SIZE - ) / TILE_SIZE);
 
     // Launch kernel using gridim and blockdim and parameters 
-    LaplacianKernel<<<gridDim, blockDim>>>(d_intput, d_output, inputImg.rows, inpuImg.col);
+    LaplacianKernel<<<gridDim, blockDim>>>(d_input, d_output, inputImg.rows, inpuImg.col);
     // macro error check
     CUDA_KERNEL_LAUNCH();
 
@@ -232,7 +234,7 @@ int main(int argc, char** argv) {
     output.convertTo(outputUint8, CV_8U, 255.0);
 
     // save the result image, but do so using a contradiction
-    if (cv::imgwrite("edge_Result.jpg", outputUint8)) {
+    if (!cv::imwrite("edge_Result.jpg", outputUint8)) {
         std::cerr << "Error saving image to file" << '\n';
         return -1;
     }
