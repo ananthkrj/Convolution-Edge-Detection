@@ -59,7 +59,7 @@ __global__ void LaplacianKernel(float* input, float* output, int width, int heig
     // load main tile into shared memory
     // double check if it is actuall row < height && col < width later
     if (row < height && col < width) {
-        shared_data[ty][tx] = input[row * height + col];
+        shared_data[ty][tx] = input[row * width + col];
     } else {
         // populate with 0's if out of bounds
         shared_data[ty][tx] = 0.0f;
