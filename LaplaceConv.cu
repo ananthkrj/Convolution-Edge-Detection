@@ -32,8 +32,12 @@
                     cudaGetErrorString(err)); \
             exit(EXIT_FAILURE); \
         } \
-        // check for device syncing
-        CUDA_CHECK(cudaDeviceSynchronize()); \
+        err = cudaDeviceSynchronize(); \
+        if (err != cudaSuccess) { \
+            fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err)); \
+            exit(EXIT_FAILURE); \
+        } \
     } while(0)
 
 
