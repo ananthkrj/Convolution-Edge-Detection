@@ -2,26 +2,6 @@
 #include <cuda_runtime.h>
 
 /**
- * Plan:
- * 
- * Kernel That implements laplace convolution:
- * 
- * 
- * Helper function for kernel launch:
- *   - Pass initialized host memory as parameters
- *   - Device memory allocation
- *   - Copying from host to device
- * 
- * Main function:
- *  - Will contain opencv image loading
- *  - Host memory allocation and helper function
- *    calling
- * 
- * 
- * 
-*/
-
-/**
  * Define compile time constants, will need for shared memory,
  * halo regions, and shared memory tile size
 */
@@ -32,7 +12,6 @@
 // Macro for checking CUDA runtime calls
 // Macro needs do while loop because this makes sure contents inside
 // do while loop always behave the same regardless of how
-// curly brackets and semi colons are usef
 #define CUDA_CHECK(call) \
     do { \
         cudaError_t err = call; \
@@ -154,6 +133,8 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
     }
 
     // synch all shared memory (final)?
+    // Not sure if i need this, probably not as syncthreads
+    // likely only needed after halo's loaded into shared mem
     __syncthreads();
 }
 
@@ -175,15 +156,25 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     CUDA_CHECK(cudaMalloc(&d_output, size));
 
     // Copy from host parameters to device using cudaMemcpy (call macro)
-    CudaMemcpy(d_input, h_)
+    CUDA_CHECK(CudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice));
 
     // allocate block and grid dimensions
+    dim3 blockDim(TILE_SIZE)(TILE_SIZE);
+    // floor calculatiorn for rows(height) and cols(width) of img
+    dim3 gridDim((inputImg.cols * TILE_SIZE - 1) / TILE_SIZE, 
+                (inputImg.rows * TILE_SIZE - ) / TILE_SIZE);
 
-    // Launch kernel using gridim and blockdim and parameters (call macro)
+    // Launch kernel using gridim and blockdim and parameters 
+    LaplacianKernel<<<gridDim, blockDim>>>(d_intput, d_output, inputImg.rows, inpuImg.col);
+    // macro error check
+    CUDA_KERNEL_LAUNCH();
 
     // Copy from device to host output (call macro)
+    CUDA_CHECK(cudaMemcpy(outputImg.ptr<float>(), d_output, size, cudaMemcpyDeviceToHost));
 
     // free device memory (call macro)
+    CUDA_CHECK(cudaFree(d_input));
+    CUDA_CHECK(cudaFree(d_output));
 }
 
 /**
@@ -194,23 +185,57 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
 */
 int main(int argc, char** argv) {
     // Check command line arguments
+    // expect to have 2 images, so argc will be number of arguments
+    if (argc != 2) {
+        std::cout << "Need proper amount of images to run" << '\n';
+        return -1;
+    }
 
-    // Load greayscale images using OpenCv, perhaps have images
-    // in same directory
+    // read and open first argument(image), storing it in
+    // a Mat object this image will be a grayscale image
+    cv::Mat img = cv::imread(argv[1], cv:IMREAD_GRAYSCALE);
 
     // check if image loaded successully
+    // run case for if the error already occurred, so if the 
+    // img is empty
+    // output an error image
+    if (img.empty()) {
+        std::cerr << "Error: Image contains no info or could not load: " << argv[1] << '\n';
+        return -1;
+    }
 
-    // convert to flag32 and normalize
+    // convert to flag32 and normalize to [0, 1]
+    // need to normalize using 1.0/255.0 as the pixel values in
+    // digital images are represented as integers that range
+    // from 0 to 255
+    
+    // declare mat object named imgFloat
+    // host memory for input
+    // CV_32F specifies 32 bit floating type bit in a mat object
+    cv::Mat imgFloat;
+    img.convertTo(imgFloat, CV_32F, 1.0/255.0);
 
-    // create output matrix with same dimensions
+    // create output matrix 
+    // host memory for output
+    // do this by creating a Mat object named output
+    // and pass dimensions of image (rows = height and cols = width)
+    // and 32 bit floating tpye specifiing parameter in a mat object
+    cv::Mat output(img.rows, img.cols, CV_32F);
 
     // call helper function
+    runLaplacian(imgFloat, output);
 
     // convert output to uint8 and denormalize
+    // I know how to convert an image to float, but how to convert float output back to integer?
+    // declare a mat object 
+    cv::Mat outputUint8;
+    output.convertTo(outputUint8, CV_8U, 255.0);
 
-    // save the result image
-
-    // perhaps display images for documentation
+    // save the result image, but do so using a contradiction
+    if (cv::imgwrite("edge_Result.jpg", outputUint8)) {
+        std::cerr << "Error saving image to file" << '\n';
+        return -1;
+    }
 
     return 0;
 }
