@@ -165,10 +165,17 @@ __global__ LaplacianKernel(float* input, float* output, int width, int height) {
 */
 void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     // Calculate Memory Size
+    // multiply rows and cols of input img
+    size_t size = inputImg.rows * inputImg.cols * sizeof(float);
 
     // Allocate Device memory using cudaMalloc
+    float *d_input;
+    CUDA_CHECK(cudaMalloc(&d_input, size));
+    float *d_output;
+    CUDA_CHECK(cudaMalloc(&d_output, size));
 
     // Copy from host parameters to device using cudaMemcpy (call macro)
+    CudaMemcpy(d_input, h_)
 
     // allocate block and grid dimensions
 
@@ -180,6 +187,7 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
 }
 
 /**
+ * Work on main before the helper function to better understand how helper works
  * Main function:
  * Will be used for cv image processing and cv intertwined host memory 
  * Will utilize command line arguments
