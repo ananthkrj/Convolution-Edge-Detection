@@ -21,7 +21,7 @@
                     cudaGetErrorString(err)); \
             exit(EXIT_FAILURE); \
         } \
-    } while (0)
+    } while(0)
 
 // Macro For checking kernel launches
 #define CUDA_KERNEL_LAUNCH() \
@@ -29,13 +29,12 @@
         cudaError_t err = cudaGetLastError(); \
         if (err != cudaSuccess) { \
             fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
-                    // dont froget to pass err to error
-                    cudaGetErrorString(err)); \
+                    cudaGetErrorString()); \
             exit(EXIT_FAILURE); \
         } \
         // check for device syncing
-        CUDA_CHECK(cudaDeviceSynchronize()); \
-    } while (0)
+        CUDA_CHECK(cudaDeviceSynchronize); \
+    } while(0)
 
 
 
@@ -159,7 +158,7 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     CUDA_CHECK(cudaMalloc(&d_output, size));
 
     // Copy from host parameters to device using cudaMemcpy (call macro)
-    CUDA_CHECK(cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(CudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice));
 
     // allocate block and grid dimensions
     dim3 blockDim(TILE_SIZE)(TILE_SIZE);
