@@ -13,19 +13,19 @@
 // Macro for checking CUDA runtime calls
 // Macro needs do while loop because this makes sure contents inside
 // do while loop always behave the same regardless of how
-#define CUDA_CHECK(call) \
-    do { \
-        cudaError_t err = call; \
-        if (err != cudaSuccess) { \
-            fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
+//#define CUDA_CHECK(call) \
+   // do { \
+       // cudaError_t err = call; \
+       // if (err != cudaSuccess) { \
+            //fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
                     cudaGetErrorString(err)); \
-            exit(EXIT_FAILURE); \
-        } \
-    } while(0)
+           // exit(EXIT_FAILURE); \
+       // } \
+   // } while(0)
 
 // Macro For checking kernel launches
-#define CUDA_KERNEL_LAUNCH() \
-    do { \
+//#define CUDA_KERNEL_LAUNCH() \
+   // do { \
         cudaError_t err = cudaGetLastError(); \
         if (err != cudaSuccess) { \
             fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
@@ -157,12 +157,12 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
 
     // Allocate Device memory using cudaMalloc
     float *d_input;
-    CUDA_CHECK(cudaMalloc(&d_input, size));
+    cudaMalloc(&d_input, size);
     float *d_output;
-    CUDA_CHECK(cudaMalloc(&d_output, size));
+    cudaMalloc(&d_output, size);
 
     // Copy from host parameters to device using cudaMemcpy (call macro)
-    CUDA_CHECK(cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice));
+    cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice);
 
     // allocate block and grid dimensions
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
@@ -173,14 +173,13 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     // Launch kernel using gridim and blockdim and parameters 
     LaplacianKernel<<<gridDim, blockDim>>>(d_input, d_output, inputImg.cols, inputImg.rows);
     // macro error check
-    CUDA_KERNEL_LAUNCH();
 
     // Copy from device to host output (call macro)
-    CUDA_CHECK(cudaMemcpy(outputImg.ptr<float>(), d_output, size, cudaMemcpyDeviceToHost));
+    cudaMemcpy(outputImg.ptr<float>(), d_output, size, cudaMemcpyDeviceToHost);
 
     // free device memory (call macro)
-    CUDA_CHECK(cudaFree(d_input));
-    CUDA_CHECK(cudaFree(d_output));
+    cudaFree(d_input);
+    cudaFree(d_output);
 }
 
 /**
