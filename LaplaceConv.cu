@@ -227,14 +227,43 @@ int main(int argc, char** argv) {
     // and 32 bit floating tpye specifiing parameter in a mat object
     cv::Mat output(img.rows, img.cols, CV_32F);
 
-    // call helper function
-    runLaplacian(imgFloat, output);
+    // DEBUG: Check the float output values before conversion
+    double minVal, maxVal;
+    cv::minMaxLoc(output, &minVal, &maxVal);
+    std::cout << "Float output stats:" << std::endl;
+    std::cout << "Min value: " << minVal << std::endl;
+    std::cout << "Max value: " << maxVal << std::endl;
+    std::cout << "Mean value: " << cv::mean(output)[0] << std::endl;
 
-    // convert output to uint8 and denormalize
-    // I know how to convert an image to float, but how to convert float output back to integer?
-    // declare a mat object 
+    // Better conversion handling negative values
     cv::Mat outputUint8;
-    output.convertTo(outputUint8, CV_8U, 255.0);
+    
+    if (maxVal > minVal) {  // Only proceed if we have actual values
+        // Method 1: Shift and scale to handle negative values
+        cv::Mat shifted;
+        output.convertTo(shifted, CV_32F, 1.0, -minVal);  // Shift to make all values positive
+        
+        double shiftedMin, shiftedMax;
+        cv::minMaxLoc(shifted, &shiftedMin, &shiftedMax);
+        
+        if (shiftedMax > 0) {
+            shifted.convertTo(outputUint8, CV_8U, 255.0/shiftedMax);
+        } else {
+            // Fallback: just take absolute values
+            cv::Mat absOutput;
+            cv::absdiff(output, cv::Scalar::all(0), absOutput);
+            double absMin, absMax;
+            cv::minMaxLoc(absOutput, &absMin, &absMax);
+            if (absMax > 0) {
+                absOutput.convertTo(outputUint8, CV_8U, 255.0/absMax);
+            } else {
+                outputUint8 = cv::Mat::zeros(img.rows, img.cols, CV_8U);
+            }
+        }
+    } else {
+        std::cout << "Warning: All output values are the same. Creating blank image." << std::endl;
+        outputUint8 = cv::Mat::zeros(img.rows, img.cols, CV_8U);
+    }
 
     // save the result image, but do so using a contradiction
     if (!cv::imwrite("edge_Result.jpg", outputUint8)) {
@@ -242,7 +271,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    std::cout << "Edge detection completed successfully! Output saved as edge_Result.jpg" << '\n';
-
+    std::cout << "Edge detection completed successfully! Output saved as edge_Result.jpg" << std::endl;
     return 0;
 }
+
