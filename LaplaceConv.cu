@@ -242,7 +242,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    std::cout << "Edge detection completed successfully! Output saved as edge_Result.jpg" << std::endl
+    std::cout << "Edge detection completed successfully! Output saved as edge_Result.jpg" << '\n';
 
     return 0;
 }
