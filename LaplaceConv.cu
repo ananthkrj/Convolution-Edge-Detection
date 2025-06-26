@@ -10,8 +10,13 @@
 #define HALO_SIZE 1
 #define SHARED_SIZE (TILE_SIZE + 2 * HALO_SIZE)
 
-// Laplacian Kernel
-// width and height are the dimensons of the image
+/**
+ * Kernel where we define block dimensions, halo regions, 
+ * and load the halo regions instead shared memory
+ * 
+ * Once halo Regions are loaded into shared memory, perform
+ * the Laplacian derivative computation
+*/
 __global__ void LaplacianKernel(float* input, float* output, int width, int height) {
     // Load constants and Halo info into shared memory
     __shared__ float shared_data[SHARED_SIZE][SHARED_SIZE];
@@ -114,9 +119,10 @@ __global__ void LaplacianKernel(float* input, float* output, int width, int heig
 
 /**
  * Cuda kernel launch helper
- * represent input and output messages as mat arrays. Pass them by address
- * Will mainly contain device memory implementation
- * inputImg and outputImg are the host memory
+ * inputImg and outputImg are the host memory which refer to
+ * imgFloat and output that were initialized in main
+ * Mainly used for device memory allocation and error checking
+ * 
 */
 void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     // Calculate Memory Size
@@ -202,10 +208,15 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
 }
 
 /**
- * Work on main before the helper function to better understand how helper works
  * Main function:
- * Will be used for cv image processing and cv intertwined host memory 
- * Will utilize command line arguments
+ * Load image to perform edge detection on
+ * Utilize opencv library to initialize host memory
+ * and convert that host memory to floating point
+ * data types to be complied with gpu processing
+ * convert floating data type output back to 8bit
+ * integer for saving result
+ * Utilize light error checking when it comes to 
+ * checking if file exists
 */
 int main(int argc, char** argv) {
     std::string imagePath;
