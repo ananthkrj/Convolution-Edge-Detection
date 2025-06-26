@@ -189,89 +189,56 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
  * Will utilize command line arguments
 */
 int main(int argc, char** argv) {
-    // Check command line arguments
-    // expect to have 2 images, so argc will be number of arguments
-    if (argc != 2) {
-        std::cout << "Need proper amount of images to run" << '\n';
-        return -1;
-    }
-
-    // read and open first argument(image), storing it in
-    // a Mat object this image will be a grayscale image
-    cv::Mat img = cv::imread(argv[1], cv::IMREAD_GRAYSCALE);
-
-    // check if image loaded successully
-    // run case for if the error already occurred, so if the 
-    // img is empty
-    // output an error image
-    if (img.empty()) {
-        std::cerr << "Error: Image contains no info or could not load: " << argv[1] << '\n';
-        return -1;
-    }
-
-    // convert to flag32 and normalize to [0, 1]
-    // need to normalize using 1.0/255.0 as the pixel values in
-    // digital images are represented as integers that range
-    // from 0 to 255
+    std::string imagePath;
     
-    // declare mat object named imgFloat
-    // host memory for input
-    // CV_32F specifies 32 bit floating type bit in a mat object
+    // Use bundled lena.jpg if no argument provided
+    if (argc == 2) {
+        imagePath = argv[1];
+    } else {
+        imagePath = "lena.jpg";
+        std::cout << "Using bundled test image: " << imagePath << std::endl;
+    }
+
+    // Read and open image as grayscale
+    cv::Mat img = cv::imread(imagePath, cv::IMREAD_GRAYSCALE);
+
+    // Check if image loaded successfully
+    if (img.empty()) {
+        std::cerr << "Error: Could not load image: " << imagePath << std::endl;
+        return -1;
+    }
+
+    // Convert to float32 and normalize to [0, 1]
     cv::Mat imgFloat;
     img.convertTo(imgFloat, CV_32F, 1.0/255.0);
 
-    // create output matrix 
-    // host memory for output
-    // do this by creating a Mat object named output
-    // and pass dimensions of image (rows = height and cols = width)
-    // and 32 bit floating tpye specifiing parameter in a mat object
+    // Create output matrix
     cv::Mat output(img.rows, img.cols, CV_32F);
 
-    // DEBUG: Check the float output values before conversion
-    double minVal, maxVal;
-    cv::minMaxLoc(output, &minVal, &maxVal);
-    std::cout << "Float output stats:" << std::endl;
-    std::cout << "Min value: " << minVal << std::endl;
-    std::cout << "Max value: " << maxVal << std::endl;
-    std::cout << "Mean value: " << cv::mean(output)[0] << std::endl;
+    // Run CUDA Laplacian kernel
+    runLaplacian(imgFloat, output);
 
-    // Better conversion handling negative values
+    // Convert output back to 8-bit for saving
     cv::Mat outputUint8;
+    cv::Mat absOutput;
+    cv::absdiff(output, cv::Scalar::all(0), absOutput);
     
-    if (maxVal > minVal) {  // Only proceed if we have actual values
-        // Method 1: Shift and scale to handle negative values
-        cv::Mat shifted;
-        output.convertTo(shifted, CV_32F, 1.0, -minVal);  // Shift to make all values positive
-        
-        double shiftedMin, shiftedMax;
-        cv::minMaxLoc(shifted, &shiftedMin, &shiftedMax);
-        
-        if (shiftedMax > 0) {
-            shifted.convertTo(outputUint8, CV_8U, 255.0/shiftedMax);
-        } else {
-            // Fallback: just take absolute values
-            cv::Mat absOutput;
-            cv::absdiff(output, cv::Scalar::all(0), absOutput);
-            double absMin, absMax;
-            cv::minMaxLoc(absOutput, &absMin, &absMax);
-            if (absMax > 0) {
-                absOutput.convertTo(outputUint8, CV_8U, 255.0/absMax);
-            } else {
-                outputUint8 = cv::Mat::zeros(img.rows, img.cols, CV_8U);
-            }
-        }
+    double minVal, maxVal;
+    cv::minMaxLoc(absOutput, &minVal, &maxVal);
+    
+    if (maxVal > 0) {
+        absOutput.convertTo(outputUint8, CV_8U, 255.0/maxVal);
     } else {
-        std::cout << "Warning: All output values are the same. Creating blank image." << std::endl;
         outputUint8 = cv::Mat::zeros(img.rows, img.cols, CV_8U);
     }
 
-    // save the result image, but do so using a contradiction
-    if (!cv::imwrite("edge_Result.jpg", outputUint8)) {
-        std::cerr << "Error saving image to file" << '\n';
+    // Save the result image
+    if (!cv::imwrite("laplacian_result.jpg", outputUint8)) {
+        std::cerr << "Error saving image to file" << std::endl;
         return -1;
     }
 
-    std::cout << "Edge detection completed successfully! Output saved as edge_Result.jpg" << std::endl;
+    std::cout << "Laplacian edge detection completed! Output saved as laplacian_result.jpg" << std::endl;
     return 0;
 }
 
