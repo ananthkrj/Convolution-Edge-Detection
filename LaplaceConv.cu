@@ -152,34 +152,78 @@ __global__ void LaplacianKernel(float* input, float* output, int width, int heig
 */
 void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     // Calculate Memory Size
-    // multiply rows and cols of input img
     size_t size = inputImg.rows * inputImg.cols * sizeof(float);
 
     // Allocate Device memory using cudaMalloc
     float *d_input;
-    cudaMalloc(&d_input, size);
+    cudaError_t err = cudaMalloc(&d_input, size);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc d_input failed: %s\n", cudaGetErrorString(err));
+        return;
+    }
+    
     float *d_output;
-    cudaMalloc(&d_output, size);
+    err = cudaMalloc(&d_output, size);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc d_output failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_input);
+        return;
+    }
 
-    // Copy from host parameters to device using cudaMemcpy (call macro)
-    cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice);
+    // Copy from host to device
+    err = cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy H2D failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_input);
+        cudaFree(d_output);
+        return;
+    }
 
     // allocate block and grid dimensions
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
-    // floor calculatiorn for rows(height) and cols(width) of img
     dim3 gridDim((inputImg.cols + TILE_SIZE - 1) / TILE_SIZE, 
                 (inputImg.rows + TILE_SIZE - 1) / TILE_SIZE);
 
-    // Launch kernel using gridim and blockdim and parameters 
+    printf("Image size: %dx%d\n", inputImg.cols, inputImg.rows);
+    printf("Grid size: %dx%d, Block size: %dx%d\n", gridDim.x, gridDim.y, blockDim.x, blockDim.y);
+
+    // Launch kernel
     LaplacianKernel<<<gridDim, blockDim>>>(d_input, d_output, inputImg.cols, inputImg.rows);
-    // macro error check
+    
+    // Check for kernel launch errors
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Kernel launch failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_input);
+        cudaFree(d_output);
+        return;
+    }
+    
+    // Wait for kernel to finish and check for execution errors
+    err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Kernel execution failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_input);
+        cudaFree(d_output);
+        return;
+    }
 
-    // Copy from device to host output (call macro)
-    cudaMemcpy(outputImg.ptr<float>(), d_output, size, cudaMemcpyDeviceToHost);
+    printf("Kernel executed successfully!\n");
 
-    // free device memory (call macro)
+    // Copy from device to host
+    err = cudaMemcpy(outputImg.ptr<float>(), d_output, size, cudaMemcpyDeviceToHost);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy D2H failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_input);
+        cudaFree(d_output);
+        return;
+    }
+
+    // Free device memory
     cudaFree(d_input);
     cudaFree(d_output);
+    
+    printf("Memory operations completed successfully!\n");
 }
 
 /**
@@ -195,7 +239,7 @@ int main(int argc, char** argv) {
     if (argc == 2) {
         imagePath = argv[1];
     } else {
-        imagePath = "lena.jpg";
+        imagePath = "Lena.jpg";
         std::cout << "Using bundled test image: " << imagePath << std::endl;
     }
 
