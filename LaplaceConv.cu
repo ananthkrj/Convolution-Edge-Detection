@@ -10,38 +10,6 @@
 #define HALO_SIZE 1
 #define SHARED_SIZE (TILE_SIZE + 2 * HALO_SIZE)
 
-// Macro for checking CUDA runtime calls
-// Macro needs do while loop because this makes sure contents inside
-// do while loop always behave the same regardless of how
-//#define CUDA_CHECK(call) \
-   // do { \
-       // cudaError_t err = call; \
-       // if (err != cudaSuccess) { \
-            //fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
-                    cudaGetErrorString(err)); \
-           // exit(EXIT_FAILURE); \
-       // } \
-   // } while(0)
-
-// Macro For checking kernel launches
-//#define CUDA_KERNEL_LAUNCH() \
-   // do { \
-        cudaError_t err = cudaGetLastError(); \
-        if (err != cudaSuccess) { \
-            fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
-                    cudaGetErrorString(err)); \
-            exit(EXIT_FAILURE); \
-        } \
-        err = cudaDeviceSynchronize(); \
-        if (err != cudaSuccess) { \
-            fprintf(stderr, "Cuda error present at %s:%d - %s\n", __FILE__, __LINE__, \
-                    cudaGetErrorString(err)); \
-            exit(EXIT_FAILURE); \
-        } \
-    } while(0)
-
-
-
 // Laplacian Kernel
 // width and height are the dimensons of the image
 __global__ void LaplacianKernel(float* input, float* output, int width, int height) {
@@ -154,14 +122,17 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     // Calculate Memory Size
     size_t size = inputImg.rows * inputImg.cols * sizeof(float);
 
-    // Allocate Device memory using cudaMalloc
+    // Allocate Device memory for input
+    // error check if cudaMalloc fails
     float *d_input;
     cudaError_t err = cudaMalloc(&d_input, size);
     if (err != cudaSuccess) {
         fprintf(stderr, "cudaMalloc d_input failed: %s\n", cudaGetErrorString(err));
         return;
     }
-    
+
+    // allocate device memory for output
+    // error check if cudaMalloc fails
     float *d_output;
     err = cudaMalloc(&d_output, size);
     if (err != cudaSuccess) {
@@ -171,6 +142,7 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     }
 
     // Copy from host to device
+    // error check if host to device transfer fails
     err = cudaMemcpy(d_input, inputImg.ptr<float>(), size, cudaMemcpyHostToDevice);
     if (err != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy H2D failed: %s\n", cudaGetErrorString(err));
@@ -184,6 +156,8 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     dim3 gridDim((inputImg.cols + TILE_SIZE - 1) / TILE_SIZE, 
                 (inputImg.rows + TILE_SIZE - 1) / TILE_SIZE);
 
+    // general good practice to print size of image (dimensions)
+    // and the grid dimensions
     printf("Image size: %dx%d\n", inputImg.cols, inputImg.rows);
     printf("Grid size: %dx%d, Block size: %dx%d\n", gridDim.x, gridDim.y, blockDim.x, blockDim.y);
 
@@ -211,6 +185,7 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
     printf("Kernel executed successfully!\n");
 
     // Copy from device to host
+    // error check if transfer doesnt work
     err = cudaMemcpy(outputImg.ptr<float>(), d_output, size, cudaMemcpyDeviceToHost);
     if (err != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy D2H failed: %s\n", cudaGetErrorString(err));
@@ -219,7 +194,7 @@ void runLaplacian(cv::Mat& inputImg, cv::Mat& outputImg) {
         return;
     }
 
-    // Free device memory
+    // Free device memory if sucessful
     cudaFree(d_input);
     cudaFree(d_output);
     
@@ -264,17 +239,7 @@ int main(int argc, char** argv) {
 
     // Convert output back to 8-bit for saving
     cv::Mat outputUint8;
-    cv::Mat absOutput;
-    cv::absdiff(output, cv::Scalar::all(0), absOutput);
-    
-    double minVal, maxVal;
-    cv::minMaxLoc(absOutput, &minVal, &maxVal);
-    
-    if (maxVal > 0) {
-        absOutput.convertTo(outputUint8, CV_8U, 255.0/maxVal);
-    } else {
-        outputUint8 = cv::Mat::zeros(img.rows, img.cols, CV_8U);
-    }
+    output.convertTo(outputUint8, CV_8U, 255.0);
 
     // Save the result image
     if (!cv::imwrite("laplacian_result.jpg", outputUint8)) {
